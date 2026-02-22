@@ -1,0 +1,7 @@
+{
+  "name": "CricTrack 3D - Monocular Trajectory Reconstruction",
+  "description": "Low-cost 3D cricket ball tracking and wicket impact prediction using a single camera and physics-based modeling.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
