@@ -53,6 +53,8 @@ export default function App() {
 
   const [impactSnapshot, setImpactSnapshot] = useState<string | null>(null);
 
+  const [isExporting, setIsExporting] = useState(false);
+
   const startLiveCamera = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
@@ -254,8 +256,9 @@ export default function App() {
 
   const exportData = async () => {
     if (points.length === 0) return;
-    
-    // 1. Export JSON as before
+    setIsExporting(true);
+
+    // 1. Export JSON Data
     const jsonData = {
       metadata: {
         timestamp: new Date().toISOString(),
@@ -269,24 +272,39 @@ export default function App() {
       predictions: predictions
     };
 
-    const jsonBlob = new Blob([JSON.stringify(jsonData, null, 2)], { type: 'application/json' });
-    const jsonUrl = URL.createObjectURL(jsonBlob);
-    const jsonLink = document.createElement('a');
-    jsonLink.href = jsonUrl;
-    jsonLink.download = `crictrack_3d_data_${Date.now()}.json`;
-    document.body.appendChild(jsonLink);
-    jsonLink.click();
-    document.body.removeChild(jsonLink);
-    URL.revokeObjectURL(jsonUrl);
+    try {
+      const jsonBlob = new Blob([JSON.stringify(jsonData, null, 2)], { type: 'application/json' });
+      const jsonUrl = URL.createObjectURL(jsonBlob);
+      const jsonLink = document.createElement('a');
+      jsonLink.href = jsonUrl;
+      jsonLink.download = `crictrack_3d_data_${Date.now()}.json`;
+      document.body.appendChild(jsonLink);
+      jsonLink.click();
+      document.body.removeChild(jsonLink);
+      URL.revokeObjectURL(jsonUrl);
 
-    // 2. Export PDF with Graphs
-    if (reportRef.current) {
-      try {
+      // 2. Export PDF with Graphs
+      if (reportRef.current) {
         const canvas = await html2canvas(reportRef.current, {
           backgroundColor: '#0a0a0a',
-          scale: 2,
+          scale: 1.5, // Reduced scale for better compatibility
           logging: false,
-          useCORS: true
+          useCORS: true,
+          allowTaint: true,
+          onclone: (clonedDoc) => {
+            // Ensure the report section is fully expanded in the clone
+            const reportEl = clonedDoc.getElementById('report-section');
+            if (reportEl) {
+              (reportEl as HTMLElement).style.maxHeight = 'none';
+              (reportEl as HTMLElement).style.overflow = 'visible';
+              // Find the scrollable container inside and expand it
+              const scrollable = reportEl.querySelector('.overflow-y-auto');
+              if (scrollable) {
+                (scrollable as HTMLElement).style.maxHeight = 'none';
+                (scrollable as HTMLElement).style.overflow = 'visible';
+              }
+            }
+          }
         });
         
         const imgData = canvas.toDataURL('image/png');
@@ -298,10 +316,12 @@ export default function App() {
         
         pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
         pdf.save(`crictrack_3d_report_${Date.now()}.pdf`);
-      } catch (err) {
-        console.error("PDF Export failed:", err);
-        alert("Failed to generate PDF report.");
       }
+    } catch (err) {
+      console.error("Export failed:", err);
+      alert("Failed to generate report. Please try again.");
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -393,10 +413,17 @@ export default function App() {
             </div>
             <button 
               onClick={exportData}
-              disabled={points.length === 0}
-              className="bg-white text-black px-4 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-wider hover:bg-zinc-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={points.length === 0 || isExporting}
+              className="bg-white text-black px-4 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-wider hover:bg-zinc-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
-              Export Report
+              {isExporting ? (
+                <>
+                  <div className="w-3 h-3 border-2 border-black/20 border-t-black rounded-full animate-spin" />
+                  Generating...
+                </>
+              ) : (
+                'Export Report'
+              )}
             </button>
           </div>
         </div>
@@ -611,7 +638,7 @@ export default function App() {
               </section>
 
               {/* Graph Section (Beside Video) */}
-              <div ref={reportRef} className="space-y-4">
+              <div ref={reportRef} id="report-section" className="space-y-4">
                 <div className="flex items-center justify-between px-2">
                   <h2 className="text-xs font-bold uppercase tracking-widest text-zinc-400 flex items-center gap-2">
                     <Activity className="w-4 h-4" /> Multi-View Projections
